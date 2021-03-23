@@ -1,6 +1,11 @@
+import abc
+import dataclasses
+
 import requests
 from bs4 import BeautifulSoup
 import datetime
+
+import newspaper
 
 _SOURCES = []
 
@@ -11,6 +16,7 @@ def all_sources():
 
 def news_source(cls):
     _SOURCES.append(cls)
+    return cls
 
 
 def date_formatting(date):
@@ -24,62 +30,94 @@ def date_formatting(date):
     return public_date
 
 
-class NewSource:
+class RssFeed(abc.ABC):
     @classmethod
-    def read(cls):
-        r = requests.get(cls.url())
-        soup = BeautifulSoup(r.content, features='html.parser')
-
+    def load(cls, limit=None):
+        resp = requests.get(cls.url())
+        soup = BeautifulSoup(resp.content, features='html.parser')
         items = soup.findAll('item')
-        return [Article(
-            title=cls.extract_title_from_item(item),
-            description=cls.extract_description_from_item(item),
-            link=cls.extract_link_from_item(item),
-            category=cls.extract_category_from_item(item),
-            pubdate=cls.extract_pubdate_from_item(item)
-        ) for item in items]
+
+        if limit is not None:
+            items = items[:limit]
+
+        return [cls._article_from_feed_item(item) for item in items]
+
+    @classmethod
+    def _article_from_feed_item(cls, item):
+        link = cls._extract_link_from_item(item)
+        np_article = newspaper.Article(link,
+                                       language='ru')
+        np_article.download()
+        np_article.parse()
+
+        text = np_article.text.replace('\n\n', '\n').split('\n')
+
+        return dict(
+            title=cls._extract_title_from_item(item),
+            description=cls._extract_description_from_item(item),
+            link=link,
+            category=cls._extract_category_from_item(item),
+            pubdate=cls._extract_pubdate_from_item(item),
+            image_link=np_article.top_image,
+            text=text
+        )
 
     @staticmethod
+    @abc.abstractmethod
     def url():
         raise NotImplementedError
 
     @staticmethod
+    @abc.abstractmethod
     def name():
         raise NotImplementedError
 
     @staticmethod
-    def extract_title_from_item(item):
+    def _extract_title_from_item(item):
         return item.find('title').text
 
     @staticmethod
-    def extract_description_from_item(item):
+    def _extract_description_from_item(item):
         return item.find('description').text.replace('\n', '')
 
     @staticmethod
-    def extract_link_from_item(item):
+    def _extract_link_from_item(item):
         return item.find('guid').text
 
     @staticmethod
-    def extract_category_from_item(item):
+    def _extract_category_from_item(item):
         return item.find('category').text
 
     @staticmethod
-    def extract_pubdate_from_item(item):
+    def _extract_pubdate_from_item(item):
         raw_date = item.find('pubdate').text
         return date_formatting(raw_date)
 
 
 class Article:
-    def __init__(self, title, description, link, category, pubdate):
+    def __init__(self, title, description, link, category, pubdate, image_link,
+                 text):
         self.title = title
         self.description = description
         self.link = link
         self.category = category
         self.pubdate = pubdate
+        self.image_link = image_link
+        self.text = text
+
+# @dataclasses.dataclass
+# class Article:
+#     title: str
+#     description: str
+#     link: str
+#     category: str
+#     pubdate: str
+#     image_link: str
+#     text: str
 
 
 @news_source
-class Lenta(NewSource):
+class Lenta(RssFeed):
     @staticmethod
     def url():
         return 'http://lenta.ru/rss'
@@ -90,7 +128,7 @@ class Lenta(NewSource):
 
 
 @news_source
-class M24(NewSource):
+class M24(RssFeed):
     @staticmethod
     def url():
         return 'https://www.m24.ru/rss.xml'
@@ -100,12 +138,12 @@ class M24(NewSource):
         return 'Москва 24'
 
     @staticmethod
-    def extract_link_from_item(item):
+    def _extract_link_from_item(item):
         return item.id.previous_sibling.strip()
 
 
 @news_source
-class Interfax(NewSource):
+class Interfax(RssFeed):
     @staticmethod
     def url():
         return 'http://www.interfax.ru/rss.asp'
@@ -116,7 +154,7 @@ class Interfax(NewSource):
 
 
 @news_source
-class Kommersant(NewSource):
+class Kommersant(RssFeed):
     @staticmethod
     def url():
         return 'http://www.kommersant.ru/RSS/news.xml'
@@ -124,3 +162,12 @@ class Kommersant(NewSource):
     @staticmethod
     def name():
         return 'Коммерсантъ'
+
+
+def get_article(source):
+    articles = source.load(limit=3)
+    print(articles)
+
+
+if __name__ == '__main__':
+    [get_article(source) for source in _SOURCES[:1]]

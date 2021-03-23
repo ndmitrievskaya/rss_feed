@@ -24,7 +24,7 @@ class NewsOut(pydantic.BaseModel):
 @app.get("/get_news", response_model=List[NewsOut])
 async def root():
     source_info_per_source = [{"source_name": source.name(),
-                               "articles": source.read()[:3]} for
+                               "articles": source.load()[:3]} for
                               source
                               in all_sources()]
 
