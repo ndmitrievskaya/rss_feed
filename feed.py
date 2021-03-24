@@ -1,29 +1,25 @@
 import abc
-import json
 
 import requests
 from bs4 import BeautifulSoup
 import datetime
 
 import newspaper
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String, create_engine, MetaData, Table
-from sqlalchemy.dialects.postgresql import JSON
-from sqlalchemy.orm import sessionmaker
-
-_SOURCES = []
 
 
-def all_sources():
-    return _SOURCES
+_REGISTERED_FEEDS = []
 
 
-def news_source(cls):
-    _SOURCES.append(cls)
+def registered_feeds():
+    return _REGISTERED_FEEDS
+
+
+def register_custom_feed(cls):
+    _REGISTERED_FEEDS.append(cls)
     return cls
 
 
-def date_formatting(date):
+def format_date(date):
     split_date = date.split(" ")
     date = " ".join(split_date[1:4])
     time = split_date[-2]
@@ -31,6 +27,17 @@ def date_formatting(date):
     final_time = datetime.datetime.strptime(time, "%H:%M:%S").strftime("%H:%M")
     public_date = final_date + " " + final_time
     return public_date
+
+
+class Article:
+    def __init__(self, title, description, link, category, pubdate, image_link, text):
+        self.title = title
+        self.description = description
+        self.link = link
+        self.category = category
+        self.pubdate = pubdate
+        self.image_link = image_link
+        self.text = text
 
 
 class RssFeed(abc.ABC):
@@ -93,21 +100,10 @@ class RssFeed(abc.ABC):
     @staticmethod
     def _extract_pubdate_from_item(item):
         raw_date = item.find("pubdate").text
-        return date_formatting(raw_date)
+        return format_date(raw_date)
 
 
-class Article:
-    def __init__(self, title, description, link, category, pubdate, image_link, text):
-        self.title = title
-        self.description = description
-        self.link = link
-        self.category = category
-        self.pubdate = pubdate
-        self.image_link = image_link
-        self.text = text
-
-
-@news_source
+@register_custom_feed
 class Lenta(RssFeed):
     @staticmethod
     def url():
@@ -118,7 +114,7 @@ class Lenta(RssFeed):
         return "Лента.ру"
 
 
-@news_source
+@register_custom_feed
 class M24(RssFeed):
     @staticmethod
     def url():
@@ -133,7 +129,7 @@ class M24(RssFeed):
         return item.id.previous_sibling.strip()
 
 
-@news_source
+@register_custom_feed
 class Interfax(RssFeed):
     @staticmethod
     def url():
@@ -144,7 +140,7 @@ class Interfax(RssFeed):
         return "Интерфакс"
 
 
-@news_source
+@register_custom_feed
 class Kommersant(RssFeed):
     @staticmethod
     def url():
@@ -153,53 +149,3 @@ class Kommersant(RssFeed):
     @staticmethod
     def name():
         return "Коммерсантъ"
-
-
-# necessary to be done for initializing the table in DB and making first cache in it
-engine = create_engine("sqlite:///news.sqlite3", echo=True)
-meta = MetaData()
-Base = declarative_base()
-
-news_news = Table(
-    "news_news",
-    meta,
-    Column("id", Integer, primary_key=True),
-    Column("pubdate", String),
-    Column("news_items", JSON),
-)
-
-
-class News(Base):
-    __tablename__ = "news_news"
-
-    id = Column(Integer, primary_key=True)
-    pubdate = Column(String)
-    news_items = Column(JSON)
-
-
-if __name__ == "__main__":
-    meta.create_all(engine)
-    Session = sessionmaker(bind=engine)
-    Session.configure(bind=engine)
-    session = Session()
-    date = datetime.datetime.now().timestamp()
-    source_info_per_source = [
-        {"source_name": source.name(), "articles": source.load(limit=1)}
-        for source in all_sources()
-    ]
-    for source_info in source_info_per_source:
-        source_info["articles"] = [
-            {
-                "title": article.title,
-                "link": article.link,
-                "image": article.image_link,
-                "description": article.description,
-                "text": article.text,
-                "published": article.pubdate,
-                "category": article.category,
-            }
-            for article in source_info["articles"]
-        ]
-    cache_news = News(pubdate=date, news_items=json.dumps(source_info_per_source))
-    session.add(cache_news)
-    session.commit()
