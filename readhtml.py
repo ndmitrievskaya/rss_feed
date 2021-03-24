@@ -1,22 +1,6 @@
 from newspaper import Article
-
-
-# import nltk
-#
-# nltk.download('punkt')
-
-
-def parse_article():
-    url = 'https://lenta.ru/news/2021/03/23/kovid/'
-    article = Article(url, language='ru')
-    article.download()
-    article.parse()
-
-    print(article.title, article.top_image, article.text)
-
-
-if __name__ == '__main__':
-    parse_article()
+import sqlite3
+from sqlite3 import Error
 
 
 class FullArticle:
@@ -54,3 +38,4 @@ class NewsItemReader:
     def extract_text_from_article(item):
         raw_text = item.text
         return raw_text.replace('\n\n', '\n')
+

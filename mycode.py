@@ -1,11 +1,19 @@
 import abc
 import dataclasses
+import json
 
 import requests
 from bs4 import BeautifulSoup
 import datetime
 
 import newspaper
+import sqlalchemy
+from sqlalchemy.dialects.mysql import insert
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, Integer, String, create_engine, MetaData, Table, \
+    DateTime
+from sqlalchemy.dialects.postgresql import JSON
+from sqlalchemy.orm import sessionmaker
 
 _SOURCES = []
 
@@ -52,7 +60,7 @@ class RssFeed(abc.ABC):
 
         text = np_article.text.replace('\n\n', '\n').split('\n')
 
-        return dict(
+        return Article(
             title=cls._extract_title_from_item(item),
             description=cls._extract_description_from_item(item),
             link=link,
@@ -104,6 +112,7 @@ class Article:
         self.pubdate = pubdate
         self.image_link = image_link
         self.text = text
+
 
 # @dataclasses.dataclass
 # class Article:
@@ -164,10 +173,49 @@ class Kommersant(RssFeed):
         return 'Коммерсантъ'
 
 
-def get_article(source):
-    articles = source.load(limit=3)
-    print(articles)
+# necessary to be done for initializing the table in DB and making first cache in it
+engine = create_engine('sqlite:///news.sqlite3', echo=True)
+meta = MetaData()
+Base = declarative_base()
+
+news_news = Table(
+    'news_news', meta,
+    Column('id', Integer, primary_key=True),
+    Column('pubdate', String),
+    Column('news_items', JSON),
+)
+
+
+class News(Base):
+    __tablename__ = 'news_news'
+
+    id = Column(Integer, primary_key=True)
+    pubdate = Column(String)
+    news_items = Column(JSON)
 
 
 if __name__ == '__main__':
-    [get_article(source) for source in _SOURCES[:1]]
+    meta.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    Session.configure(bind=engine)
+    session = Session()
+    date = datetime.datetime.now().timestamp()
+    source_info_per_source = [{"source_name": source.name(),
+                               "articles": source.load(limit=1)} for
+                              source
+                              in all_sources()]
+    for source_info in source_info_per_source:
+        source_info["articles"] = [{
+            'title': article.title,
+            'link': article.link,
+            'image': article.image_link,
+            'description': article.description,
+            'text': article.text,
+            'published': article.pubdate,
+            'category': article.category
+        } for article in source_info["articles"]
+        ]
+    cache_news = News(pubdate=date,
+                      news_items=json.dumps(source_info_per_source))
+    session.add(cache_news)
+    session.commit()
