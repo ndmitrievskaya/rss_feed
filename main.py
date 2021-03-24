@@ -37,11 +37,15 @@ def get_session():
 
 @app.get("/get_news", response_model=List[RssFeedOut])
 def root(session: Session = Depends(get_session)):
-    # date = datetime.datetime.now().timestamp()
-    # query = session.query(db.RssFeedCache)[-1]
-    #
-    # if (int(float(date)) - int(float(query.pubdate))) < 180:
-    #     return json.loads(query.news_items)
+    date = datetime.datetime.now().timestamp()
+    cache_entry = session.query(db.RssFeedCache).order_by(
+        db.RssFeedCache.timestamp.desc()).first()
+
+    x = datetime.timedelta(minutes=3).total_seconds()
+
+    if cache_entry is not None:
+        if int(float(date)) - int(float(cache_entry.timestamp)) < x:
+            return json.loads(cache_entry.snapshot)
 
     rss_feed_outs = [
         RssFeedOut(
@@ -62,9 +66,11 @@ def root(session: Session = Depends(get_session)):
         for feed in registered_feeds()
     ]
 
+    snapshot = json.dumps(
+        [rss_feed_out.dict() for rss_feed_out in rss_feed_outs])
 
-    # cache_news = News(pubdate=date,
-    #                   news_items=json.dumps(source_info_per_source))
-    # session.add(cache_news)
-    # session.commit()
+    new_cache_entry = db.RssFeedCache(timestamp=date,
+                                      snapshot=snapshot)
+    session.add(new_cache_entry)
+    session.commit()
     return rss_feed_outs
