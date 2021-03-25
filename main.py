@@ -59,18 +59,15 @@ def root(session: Session = Depends(get_session)):
                     text=article.text,
                     published=article.pubdate,
                     category=article.category,
-                )
-                for article in feed.load(limit=3)
+                ) for article in feed.load(limit=3)
             ],
-        )
-        for feed in registered_feeds()
+        ) for feed in registered_feeds()
     ]
 
     snapshot = json.dumps(
         [rss_feed_out.dict() for rss_feed_out in rss_feed_outs])
 
-    new_cache_entry = db.RssFeedCache(timestamp=date,
-                                      snapshot=snapshot)
+    new_cache_entry = db.RssFeedCache(timestamp=date, snapshot=snapshot)
     session.add(new_cache_entry)
     session.commit()
     return rss_feed_outs

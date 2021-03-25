@@ -6,7 +6,6 @@ import datetime
 
 import newspaper
 
-
 _REGISTERED_FEEDS = []
 
 
@@ -23,14 +22,16 @@ def format_date(date):
     split_date = date.split(" ")
     date = " ".join(split_date[1:4])
     time = split_date[-2]
-    final_date = datetime.datetime.strptime(date, "%d %b %Y").strftime("%d.%m.%Y")
+    final_date = datetime.datetime.strptime(date,
+                                            "%d %b %Y").strftime("%d.%m.%Y")
     final_time = datetime.datetime.strptime(time, "%H:%M:%S").strftime("%H:%M")
     public_date = final_date + " " + final_time
     return public_date
 
 
 class Article:
-    def __init__(self, title, description, link, category, pubdate, image_link, text):
+    def __init__(self, title, description, link, category, pubdate, image_link,
+                 text):
         self.title = title
         self.description = description
         self.link = link
