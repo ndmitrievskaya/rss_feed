@@ -60,7 +60,7 @@ def root(session: Session = Depends(get_session)):
                     published=article.pubdate,
                     category=article.category,
                 )
-                for article in feed.load(limit=1)
+                for article in feed.load(limit=3)
             ],
         )
         for feed in registered_feeds()

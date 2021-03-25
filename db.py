@@ -3,7 +3,7 @@ from sqlalchemy import Column, Integer, String, create_engine
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import sessionmaker
 
-engine = create_engine("sqlite:///news.sqlite3", echo=True)
+engine = create_engine("postgresql://postgres:postgres@postgres_db_container/rss_feed_cache", echo=True)
 Base = declarative_base()
 
 make_session = sessionmaker(bind=engine)
